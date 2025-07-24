@@ -188,10 +188,10 @@ MIDDLEWARE = [
 CORS_ALLOW_ALL_ORIGINS = True
 
 # For production, specify allowed origins
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:3000",  # React development server
-#     "https://yourdomain.com",  # Production domain
-# ]
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # React development server
+    "https://ia-admin-app.netlify.app",  # Production domain
+]
 
 # Additional CORS settings
 CORS_ALLOW_CREDENTIALS = True
