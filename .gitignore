@@ -1,0 +1,62 @@
+# === ENVIRONNEMENT PYTHON ===
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# === VIRTUAL ENV ===
+venv/
+env/
+ENV/
+.venv/
+
+# === FICHIERS DE CONFIG PERSO ===
+*.log
+*.sqlite3
+*.pot
+*.pyc
+
+# === FICHIERS KILLO (à ignorer) ===
+**/killo*.md
+
+# === FICHIERS MARKDOWN GÉNÉRAUX (optionnel sauf README.md) ===
+*.md
+!README.md
+
+# === FICHIERS CACHE & TEMP ===
+*.bak
+*.swp
+.DS_Store
+Thumbs.db
+
+# === IDEs ===
+# VSCode
+.vscode/
+.code-workspace
+
+# PyCharm
+.idea/
+
+# === ENV VARIABLES ===
+.env
+*.env
+.env.*
+
+# === TEST / COVERAGE ===
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# === MIGRATIONS (optionnel) ===
+# Vous pouvez commenter si vous voulez versionner vos migrations
+**/migrations/
+!**/migrations/__init__.py
