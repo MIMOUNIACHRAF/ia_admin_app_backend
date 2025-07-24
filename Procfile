@@ -1,1 +1,1 @@
-web: gunicorn config.wsgi:application
+web: gunicorn ia_admin_app_backend.wsgi:application
