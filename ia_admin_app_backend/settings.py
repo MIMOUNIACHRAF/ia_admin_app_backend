@@ -10,36 +10,26 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
+import os
 from pathlib import Path
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-$xl17z8wp=8$y-5bd@bx2f)q&^@%al^+1=p$9+jk*84ng^)o79'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-import os
-
-DEBUG = True
+# DEBUG : lit la variable d'environnement, par défaut False
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'default-secret-key')
+# SECRET_KEY : à changer impérativement en prod, sinon met une clé par défaut pour dev
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-key')
 
-# ALLOWED_HOSTS : on split les chaînes par virgule
+# ALLOWED_HOSTS : liste séparée par des virgules dans la variable d'env
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost').split(',')
 
-# CORS_ALLOWED_ORIGINS : idem, on split par virgule
+# CORS_ALLOWED_ORIGINS : liste séparée par des virgules dans la variable d'env
 CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',')
-ALLOWED_HOSTS = []
-
 
 # Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -47,9 +37,19 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    # Applications tierces
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
+    'corsheaders',
+
+    # Votre application custom
+    'auth_admin',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # Toujours en premier
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -64,7 +64,7 @@ ROOT_URLCONF = 'ia_admin_app_backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [],  # Ajoutez des chemins si besoin
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -79,10 +79,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ia_admin_app_backend.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-
+# Database : ici SQLite, en prod penser à une BDD plus robuste
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -90,10 +87,7 @@ DATABASES = {
     }
 }
 
-
 # Password validation
-# https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -109,31 +103,22 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
-# https://docs.djangoproject.com/en/5.0/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.0/howto/static-files/
-
 STATIC_URL = 'static/'
 
 # Default primary key field type
-# https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# User model personnalisé
 AUTH_USER_MODEL = 'auth_admin.AdminUser'
 
-# REST Framework settings
+# REST Framework configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -143,9 +128,7 @@ REST_FRAMEWORK = {
     ),
 }
 
-# JWT settings
-from datetime import timedelta
-
+# Configuration JWT
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
@@ -178,30 +161,9 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
-# Add 'rest_framework_simplejwt.token_blacklist' to INSTALLED_APPS
-INSTALLED_APPS += [
-    'rest_framework',
-    'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist',
-    'corsheaders',
-    'auth_admin',
-]
+# CORS configuration
+CORS_ALLOW_ALL_ORIGINS = False  # Change à True si tu veux tout autoriser en dev
 
-# CORS settings
-MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # This should be placed at the top of the list
-    # ... other middleware
-] + MIDDLEWARE  # Add to existing middleware
+CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS  # Prend la liste des variables d'environnement
 
-# CORS settings
-# For development, you can allow all origins
-CORS_ALLOW_ALL_ORIGINS = True
-
-# For production, specify allowed origins
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # React development server
-    "https://ia-admin-app.netlify.app",  # Production domain
-]
-
-# Additional CORS settings
 CORS_ALLOW_CREDENTIALS = True
