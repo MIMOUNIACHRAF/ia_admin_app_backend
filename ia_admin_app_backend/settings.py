@@ -23,8 +23,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-$xl17z8wp=8$y-5bd@bx2f)q&^@%al^+1=p$9+jk*84ng^)o79'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+import os
 
+DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+
+SECRET_KEY = os.environ.get('SECRET_KEY', 'default-secret-key')
+
+# ALLOWED_HOSTS : on split les chaînes par virgule
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost').split(',')
+
+# CORS_ALLOWED_ORIGINS : idem, on split par virgule
+CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',')
 ALLOWED_HOSTS = []
 
 
