@@ -157,15 +157,12 @@ REST_FRAMEWORK = {
     ],
 }
 CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://default:achraf@achraf@redis-14288.c8.us-east-1-3.ec2.redns.redis-cloud.com:14288/0",
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "PASSWORD": "achraf@achraf",
-        },
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'my_cache_table',
     }
 }
+
 
 
 
