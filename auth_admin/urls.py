@@ -19,5 +19,5 @@ urlpatterns = [
     path("auth/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh_cookie"),
 
     # API agents IA
-    path("api/", include(router.urls)),
+    path("V1/", include(router.urls)),
 ]
