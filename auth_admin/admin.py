@@ -71,5 +71,21 @@ class UserAdmin(BaseUserAdmin):
 
 # Now register the new UserAdmin...
 admin.site.register(AdminUser, UserAdmin)
-admin.site.register(AgentIA)
-admin.site.register(QuestionReponse)
+
+
+from django.contrib import admin
+from .models import AgentIA, QuestionReponse
+
+class QuestionReponseInline(admin.TabularInline):
+    model = QuestionReponse
+    extra = 1
+
+@admin.register(AgentIA)
+class AgentIAAdmin(admin.ModelAdmin):
+    list_display = ('nom', 'type_agent', 'actif', 'proprietaire', 'date_creation')
+    inlines = [QuestionReponseInline]
+
+# Enregistre QuestionReponse si tu souhaites l’éditer indépendamment aussi
+@admin.register(QuestionReponse)
+class QuestionReponseAdmin(admin.ModelAdmin):
+    list_display = ('question', 'agent')

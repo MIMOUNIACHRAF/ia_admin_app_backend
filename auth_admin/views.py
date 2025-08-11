@@ -7,7 +7,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.exceptions import TokenError
 from .serializers import AdminTokenObtainPairSerializer, AdminUserSerializer
-
+from django.core.cache import cache
+from rest_framework import status
 JWT_COOKIE_SETTINGS = getattr(settings, "JWT_COOKIE_SETTINGS", {
     "httponly": True,
     "secure": False,
@@ -17,12 +18,96 @@ JWT_COOKIE_SETTINGS = getattr(settings, "JWT_COOKIE_SETTINGS", {
 })
 
 
+# class AdminTokenObtainPairView(TokenObtainPairView):
+#     serializer_class = AdminTokenObtainPairSerializer
+#     permission_classes = [AllowAny]
+
+#     def post(self, request, *args, **kwargs):
+#         response = super().post(request, *args, **kwargs)
+#         refresh_token = response.data.get("refresh")
+#         access_token = response.data.get("access")
+
+#         if refresh_token:
+#             response.set_cookie(
+#                 key="refresh_token",
+#                 value=refresh_token,
+#                 httponly=JWT_COOKIE_SETTINGS["httponly"],
+#                 secure=JWT_COOKIE_SETTINGS["secure"],
+#                 samesite=JWT_COOKIE_SETTINGS["samesite"],
+#                 path=JWT_COOKIE_SETTINGS["path"],
+#                 max_age=JWT_COOKIE_SETTINGS["max_age"],
+#             )
+#             response.data.pop("refresh", None)
+
+#         if access_token:
+#             # Mettre aussi dans le header pour faciliter l'utilisation côté front
+#             response["Authorization"] = f"Bearer {access_token}"
+
+#         return response
+
+from django.core.cache import cache
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework.permissions import AllowAny
+
 class AdminTokenObtainPairView(TokenObtainPairView):
     serializer_class = AdminTokenObtainPairSerializer
     permission_classes = [AllowAny]
 
+    MAX_FAILED_ATTEMPTS = 5
+    BLOCK_TIME = 15 * 60  # 15 minutes en secondes
+
+    def get_client_ip(self, request):
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0].strip()
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
+
     def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
+        ip = self.get_client_ip(request)
+        print(f"[DEBUG] Tentative de login depuis IP: {ip}")
+
+        blocked_key = f"blocked_{ip}"
+        failed_key = f"failed_login_{ip}"
+
+        if cache.get(blocked_key):
+            print(f"[DEBUG] IP {ip} bloquée temporairement")
+            return Response(
+                {"detail": "Trop de tentatives de connexion. Veuillez réessayer dans 15 minutes."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        failed_attempts = cache.get(failed_key, 0)
+        print(f"[DEBUG] Tentatives échouées actuelles pour IP {ip}: {failed_attempts}")
+
+        try:
+            response = super().post(request, *args, **kwargs)
+        except Exception as e:
+            print(f"[ERROR] Exception lors login: {e}")
+            # Incrémente compteur échec
+            failed_attempts += 1
+            cache.set(failed_key, failed_attempts, timeout=self.BLOCK_TIME)
+            print(f"[DEBUG] Login échoué - incrémentation tentative à {failed_attempts} pour IP {ip}")
+            print(f"[DEBUG] Cache get après set {failed_key}: {cache.get(failed_key)}")
+
+            if failed_attempts >= self.MAX_FAILED_ATTEMPTS:
+                cache.set(blocked_key, True, timeout=self.BLOCK_TIME)
+                print(f"[DEBUG] IP {ip} bloquée pendant {self.BLOCK_TIME} secondes")
+                return Response(
+                    {"detail": "Trop de tentatives de connexion. IP bloquée 15 minutes."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+            return Response({"detail": "Identifiants invalides."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # Login réussi, reset compteur
+        print(f"[DEBUG] Login réussi pour IP {ip}, reset compteur")
+        cache.delete(failed_key)
+        cache.delete(blocked_key)
+
+        # Gestion tokens cookie + header
         refresh_token = response.data.get("refresh")
         access_token = response.data.get("access")
 
@@ -30,16 +115,15 @@ class AdminTokenObtainPairView(TokenObtainPairView):
             response.set_cookie(
                 key="refresh_token",
                 value=refresh_token,
-                httponly=JWT_COOKIE_SETTINGS["httponly"],
-                secure=JWT_COOKIE_SETTINGS["secure"],
-                samesite=JWT_COOKIE_SETTINGS["samesite"],
-                path=JWT_COOKIE_SETTINGS["path"],
-                max_age=JWT_COOKIE_SETTINGS["max_age"],
+                httponly=JWT_COOKIE_SETTINGS.get("httponly", True),
+                secure=JWT_COOKIE_SETTINGS.get("secure", False),
+                samesite=JWT_COOKIE_SETTINGS.get("samesite", "Lax"),
+                path=JWT_COOKIE_SETTINGS.get("path", "/"),
+                max_age=JWT_COOKIE_SETTINGS.get("max_age", 7 * 24 * 60 * 60),
             )
             response.data.pop("refresh", None)
 
         if access_token:
-            # Mettre aussi dans le header pour faciliter l'utilisation côté front
             response["Authorization"] = f"Bearer {access_token}"
 
         return response
