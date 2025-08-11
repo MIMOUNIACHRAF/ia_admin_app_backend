@@ -63,7 +63,7 @@ class AdminTokenObtainPairView(TokenObtainPairView):
     permission_classes = [AllowAny]
 
     MAX_FAILED_ATTEMPTS = 5
-    BLOCK_TIME = 15 * 60  # 15 minutes en secondes
+    BLOCK_TIME = 5 * 60  # 15 minutes en secondes
 
     def get_client_ip(self, request):
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
