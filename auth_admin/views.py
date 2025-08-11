@@ -9,6 +9,9 @@ from rest_framework_simplejwt.exceptions import TokenError
 from .serializers import AdminTokenObtainPairSerializer, AdminUserSerializer
 from django.core.cache import cache
 from rest_framework import status
+from rest_framework.exceptions import AuthenticationFailed
+
+
 JWT_COOKIE_SETTINGS = getattr(settings, "JWT_COOKIE_SETTINGS", {
     "httponly": True,
     "secure": False,
@@ -51,6 +54,10 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.permissions import AllowAny
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class AdminTokenObtainPairView(TokenObtainPairView):
     serializer_class = AdminTokenObtainPairSerializer
     permission_classes = [AllowAny]
@@ -68,46 +75,76 @@ class AdminTokenObtainPairView(TokenObtainPairView):
 
     def post(self, request, *args, **kwargs):
         ip = self.get_client_ip(request)
-        print(f"[DEBUG] Tentative de login depuis IP: {ip}")
+        logger.debug(f"Tentative de login depuis IP: {ip}")
 
         blocked_key = f"blocked_{ip}"
         failed_key = f"failed_login_{ip}"
 
         if cache.get(blocked_key):
-            print(f"[DEBUG] IP {ip} bloquée temporairement")
+            logger.debug(f"IP {ip} bloquée temporairement")
             return Response(
                 {"detail": "Trop de tentatives de connexion. Veuillez réessayer dans 15 minutes."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
         failed_attempts = cache.get(failed_key, 0)
-        print(f"[DEBUG] Tentatives échouées actuelles pour IP {ip}: {failed_attempts}")
+        logger.debug(f"Tentatives échouées actuelles pour IP {ip}: {failed_attempts}")
 
         try:
             response = super().post(request, *args, **kwargs)
-        except Exception as e:
-            print(f"[ERROR] Exception lors login: {e}")
-            # Incrémente compteur échec
+        except AuthenticationFailed as auth_exc:
+            # Cas classique : identifiants invalides
             failed_attempts += 1
             cache.set(failed_key, failed_attempts, timeout=self.BLOCK_TIME)
-            print(f"[DEBUG] Login échoué - incrémentation tentative à {failed_attempts} pour IP {ip}")
-            print(f"[DEBUG] Cache get après set {failed_key}: {cache.get(failed_key)}")
+            logger.error(f"AuthenticationFailed lors login IP {ip}: {auth_exc}")
+            logger.debug(f"Login échoué - incrémentation tentative à {failed_attempts} pour IP {ip}")
 
             if failed_attempts >= self.MAX_FAILED_ATTEMPTS:
                 cache.set(blocked_key, True, timeout=self.BLOCK_TIME)
-                print(f"[DEBUG] IP {ip} bloquée pendant {self.BLOCK_TIME} secondes")
+                logger.debug(f"IP {ip} bloquée pendant {self.BLOCK_TIME} secondes")
                 return Response(
                     {"detail": "Trop de tentatives de connexion. IP bloquée 15 minutes."},
                     status=status.HTTP_429_TOO_MANY_REQUESTS,
                 )
             return Response({"detail": "Identifiants invalides."}, status=status.HTTP_401_UNAUTHORIZED)
 
+        except Exception as e:
+            # Autres erreurs inattendues
+            failed_attempts += 1
+            cache.set(failed_key, failed_attempts, timeout=self.BLOCK_TIME)
+            logger.error(f"Exception lors login IP {ip}: {e}")
+            logger.debug(f"Login échoué - incrémentation tentative à {failed_attempts} pour IP {ip}")
+
+            if failed_attempts >= self.MAX_FAILED_ATTEMPTS:
+                cache.set(blocked_key, True, timeout=self.BLOCK_TIME)
+                logger.debug(f"IP {ip} bloquée pendant {self.BLOCK_TIME} secondes")
+                return Response(
+                    {"detail": "Trop de tentatives de connexion. IP bloquée 15 minutes."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+            return Response({"detail": "Erreur serveur lors de la connexion."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Si login échoue (status != 200), on traite aussi
+        if response.status_code != status.HTTP_200_OK:
+            failed_attempts += 1
+            cache.set(failed_key, failed_attempts, timeout=self.BLOCK_TIME)
+            logger.debug(f"Login échoué - incrémentation tentative à {failed_attempts} pour IP {ip}")
+
+            if failed_attempts >= self.MAX_FAILED_ATTEMPTS:
+                cache.set(blocked_key, True, timeout=self.BLOCK_TIME)
+                logger.debug(f"IP {ip} bloquée pendant {self.BLOCK_TIME} secondes")
+                return Response(
+                    {"detail": "Trop de tentatives de connexion. IP bloquée 15 minutes."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+            return response
+
         # Login réussi, reset compteur
-        print(f"[DEBUG] Login réussi pour IP {ip}, reset compteur")
+        logger.debug(f"Login réussi pour IP {ip}, reset compteur")
         cache.delete(failed_key)
         cache.delete(blocked_key)
 
-        # Gestion tokens cookie + header
+        # Gestion tokens (cookie + header)
         refresh_token = response.data.get("refresh")
         access_token = response.data.get("access")
 
@@ -127,8 +164,6 @@ class AdminTokenObtainPairView(TokenObtainPairView):
             response["Authorization"] = f"Bearer {access_token}"
 
         return response
-
-
 class AdminUserView(APIView):
     permission_classes = [IsAuthenticated]
 

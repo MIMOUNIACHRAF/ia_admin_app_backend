@@ -20,6 +20,7 @@ CORS_ALLOWED_ORIGINS = [
 # En mode DEBUG, autorise toutes les origines pour faciliter le développement
 CORS_ALLOW_CREDENTIALS = True
 CORS_ORIGIN_ALLOW_ALL = True
+DEBUG = True
 
 # if DEBUG:
 #     CORS_ALLOW_ALL_ORIGINS = True
@@ -158,12 +159,17 @@ REST_FRAMEWORK = {
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",
+        "LOCATION": "redis://default:achraf@achraf@redis-14288.c8.us-east-1-3.ec2.redns.redis-cloud.com:14288/0",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
+            "PASSWORD": "achraf@achraf",
+        },
     }
 }
+
+
+
+
 
 # JWT
 SIMPLE_JWT = {
