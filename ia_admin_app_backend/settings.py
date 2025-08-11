@@ -52,7 +52,7 @@ CORS_ALLOW_HEADERS = [
 
 # Configuration des en-têtes exposés
 CORS_EXPOSE_HEADERS = [
-    "content-disposition",
+    "Authorization",
 ]
 
 # Applications
@@ -81,6 +81,9 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",  # Doit être juste après SecurityMiddleware
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    
+    "auth_admin.middleware.RefreshAccessMiddleware",
+    
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -155,10 +158,10 @@ REST_FRAMEWORK = {
 
 # JWT
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
-    "ROTATE_REFRESH_TOKENS": False,
-    "BLACKLIST_AFTER_ROTATION": False,
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
     "ALGORITHM": "HS256",
     "SIGNING_KEY": SECRET_KEY,
     "AUTH_HEADER_TYPES": ("Bearer",),
@@ -167,4 +170,11 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
     "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
     "TOKEN_TYPE_CLAIM": "token_type",
+}
+JWT_COOKIE_SETTINGS = {
+    "httponly": True,
+    "secure": not DEBUG,            # True en prod
+    "samesite": "Lax",             # "Strict" ou "None" en fonction du besoin (None si cross-site et secure True)
+    "path": "/",
+    "max_age": 7 * 24 * 60 * 60,
 }
