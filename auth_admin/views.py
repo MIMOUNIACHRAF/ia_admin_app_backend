@@ -1,169 +1,56 @@
+# views.py
 from django.conf import settings
-from rest_framework import status
+from django.contrib.auth import get_user_model
+from rest_framework import status, permissions, filters, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
-from rest_framework_simplejwt.exceptions import TokenError
-from .serializers import AdminTokenObtainPairSerializer, AdminUserSerializer
-from django.core.cache import cache
-from rest_framework import status
-from rest_framework.exceptions import AuthenticationFailed
-
-
-JWT_COOKIE_SETTINGS = getattr(settings, "JWT_COOKIE_SETTINGS", {
-    "httponly": True,
-    "secure": False,
-    "samesite": "Lax",
-    "path": "/",
-    "max_age": 7 * 24 * 60 * 60
-})
-
-
-# class AdminTokenObtainPairView(TokenObtainPairView):
-#     serializer_class = AdminTokenObtainPairSerializer
-#     permission_classes = [AllowAny]
-
-#     def post(self, request, *args, **kwargs):
-#         response = super().post(request, *args, **kwargs)
-#         refresh_token = response.data.get("refresh")
-#         access_token = response.data.get("access")
-
-#         if refresh_token:
-#             response.set_cookie(
-#                 key="refresh_token",
-#                 value=refresh_token,
-#                 httponly=JWT_COOKIE_SETTINGS["httponly"],
-#                 secure=JWT_COOKIE_SETTINGS["secure"],
-#                 samesite=JWT_COOKIE_SETTINGS["samesite"],
-#                 path=JWT_COOKIE_SETTINGS["path"],
-#                 max_age=JWT_COOKIE_SETTINGS["max_age"],
-#             )
-#             response.data.pop("refresh", None)
-
-#         if access_token:
-#             # Mettre aussi dans le header pour faciliter l'utilisation côté front
-#             response["Authorization"] = f"Bearer {access_token}"
-
-#         return response
-
-from django.core.cache import cache
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework.permissions import AllowAny
-
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+from .serializers import AdminTokenObtainPairSerializer, AdminUserSerializer, AgentIASerializer
+from .models import AgentIA
+from rest_framework.pagination import PageNumberPagination
 import logging
 
 logger = logging.getLogger(__name__)
 
+JWT_COOKIE_SETTINGS = getattr(settings, "JWT_COOKIE_SETTINGS", {
+    "httponly": True,
+    "secure": not settings.DEBUG,
+    "samesite": "Lax",
+    "path": "/",
+    "max_age": 7*24*60*60  # 7 jours
+})
+
+# -------- Auth --------
 class AdminTokenObtainPairView(TokenObtainPairView):
     serializer_class = AdminTokenObtainPairSerializer
     permission_classes = [AllowAny]
 
-    MAX_FAILED_ATTEMPTS = 5
-    BLOCK_TIME = 5 * 60  # 15 minutes en secondes
-
-    def get_client_ip(self, request):
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0].strip()
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
-
     def post(self, request, *args, **kwargs):
-        ip = self.get_client_ip(request)
-        logger.debug(f"Tentative de login depuis IP: {ip}")
+        response = super().post(request, *args, **kwargs)
+        refresh_str = response.data.get("refresh")
+        access_str = response.data.get("access")
+        if not refresh_str or not access_str:
+            return Response({"detail": "Erreur génération tokens."}, status=500)
 
-        blocked_key = f"blocked_{ip}"
-        failed_key = f"failed_login_{ip}"
+        # Mettre refresh en cookie HttpOnly
+        cfg = JWT_COOKIE_SETTINGS
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_str,
+            httponly=cfg.get("httponly", True),
+            secure=cfg.get("secure", False),
+            samesite=cfg.get("samesite", "Lax"),
+            path=cfg.get("path", "/"),
+            max_age=cfg.get("max_age", 7*24*60*60),
+        )
 
-        if cache.get(blocked_key):
-            logger.debug(f"IP {ip} bloquée temporairement")
-            return Response(
-                {"detail": "Trop de tentatives de connexion. Veuillez réessayer dans 15 minutes."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS,
-            )
-
-        failed_attempts = cache.get(failed_key, 0)
-        logger.debug(f"Tentatives échouées actuelles pour IP {ip}: {failed_attempts}")
-
-        try:
-            response = super().post(request, *args, **kwargs)
-        except AuthenticationFailed as auth_exc:
-            # Cas classique : identifiants invalides
-            failed_attempts += 1
-            cache.set(failed_key, failed_attempts, timeout=self.BLOCK_TIME)
-            logger.error(f"AuthenticationFailed lors login IP {ip}: {auth_exc}")
-            logger.debug(f"Login échoué - incrémentation tentative à {failed_attempts} pour IP {ip}")
-
-            if failed_attempts >= self.MAX_FAILED_ATTEMPTS:
-                cache.set(blocked_key, True, timeout=self.BLOCK_TIME)
-                logger.debug(f"IP {ip} bloquée pendant {self.BLOCK_TIME} secondes")
-                return Response(
-                    {"detail": "Trop de tentatives de connexion. IP bloquée 15 minutes."},
-                    status=status.HTTP_429_TOO_MANY_REQUESTS,
-                )
-            return Response({"detail": "Identifiants invalides."}, status=status.HTTP_401_UNAUTHORIZED)
-
-        except Exception as e:
-            # Autres erreurs inattendues
-            failed_attempts += 1
-            cache.set(failed_key, failed_attempts, timeout=self.BLOCK_TIME)
-            logger.error(f"Exception lors login IP {ip}: {e}")
-            logger.debug(f"Login échoué - incrémentation tentative à {failed_attempts} pour IP {ip}")
-
-            if failed_attempts >= self.MAX_FAILED_ATTEMPTS:
-                cache.set(blocked_key, True, timeout=self.BLOCK_TIME)
-                logger.debug(f"IP {ip} bloquée pendant {self.BLOCK_TIME} secondes")
-                return Response(
-                    {"detail": "Trop de tentatives de connexion. IP bloquée 15 minutes."},
-                    status=status.HTTP_429_TOO_MANY_REQUESTS,
-                )
-            return Response({"detail": "Erreur serveur lors de la connexion."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Si login échoue (status != 200), on traite aussi
-        if response.status_code != status.HTTP_200_OK:
-            failed_attempts += 1
-            cache.set(failed_key, failed_attempts, timeout=self.BLOCK_TIME)
-            logger.debug(f"Login échoué - incrémentation tentative à {failed_attempts} pour IP {ip}")
-
-            if failed_attempts >= self.MAX_FAILED_ATTEMPTS:
-                cache.set(blocked_key, True, timeout=self.BLOCK_TIME)
-                logger.debug(f"IP {ip} bloquée pendant {self.BLOCK_TIME} secondes")
-                return Response(
-                    {"detail": "Trop de tentatives de connexion. IP bloquée 15 minutes."},
-                    status=status.HTTP_429_TOO_MANY_REQUESTS,
-                )
-            return response
-
-        # Login réussi, reset compteur
-        logger.debug(f"Login réussi pour IP {ip}, reset compteur")
-        cache.delete(failed_key)
-        cache.delete(blocked_key)
-
-        # Gestion tokens (cookie + header)
-        refresh_token = response.data.get("refresh")
-        access_token = response.data.get("access")
-
-        if refresh_token:
-            response.set_cookie(
-                key="refresh_token",
-                value=refresh_token,
-                httponly=JWT_COOKIE_SETTINGS.get("httponly", True),
-                secure=JWT_COOKIE_SETTINGS.get("secure", False),
-                samesite=JWT_COOKIE_SETTINGS.get("samesite", "Lax"),
-                path=JWT_COOKIE_SETTINGS.get("path", "/"),
-                max_age=JWT_COOKIE_SETTINGS.get("max_age", 7 * 24 * 60 * 60),
-            )
-            response.data.pop("refresh", None)
-
-        if access_token:
-            response["Authorization"] = f"Bearer {access_token}"
-
+        # Mettre access dans header
+        response["Authorization"] = f"Bearer {access_str}"
+        response.data.pop("refresh", None)
         return response
+
 class AdminUserView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -171,101 +58,82 @@ class AdminUserView(APIView):
         serializer = AdminUserSerializer(request.user)
         return Response(serializer.data)
 
-
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        refresh = request.COOKIES.get("refresh_token")
-        if not refresh:
-            return Response({"detail": "Refresh token non trouvé."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            token = RefreshToken(refresh)
-            token.blacklist()
-        except TokenError:
-            pass
-
-        resp = Response({"detail": "Déconnecté"}, status=status.HTTP_200_OK)
-        resp.delete_cookie("refresh_token", path=JWT_COOKIE_SETTINGS["path"])
+        # Supprime uniquement le cookie refresh
+        resp = Response({"detail": "Déconnecté"}, status=200)
+        resp.delete_cookie("refresh_token", path=JWT_COOKIE_SETTINGS.get("path", "/"))
         return resp
-
 
 class CustomTokenRefreshView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        refresh_token = request.COOKIES.get("refresh_token")
-        if not refresh_token:
-            return Response({"detail": "Refresh token absent."}, status=status.HTTP_401_UNAUTHORIZED)
-
+        refresh_cookie = request.COOKIES.get("refresh_token")
+        if not refresh_cookie:
+            return Response({"detail": "Refresh token absent."}, status=401)
         try:
-            refresh = RefreshToken(refresh_token)
-            new_access = str(refresh.access_token)
+            old_refresh = RefreshToken(refresh_cookie)
 
-            resp = Response({"access": new_access}, status=status.HTTP_200_OK)
+            user_id = old_refresh.get(settings.SIMPLE_JWT.get("USER_ID_CLAIM", "user_id"))
+            User = get_user_model()
+            user = User.objects.get(id=user_id, is_active=True)
+
+            # Génère nouveau access token
+            new_access = str(old_refresh.access_token)
+
+            # Met à jour cookie refresh (pas de blacklist)
+            resp = Response({"access": new_access}, status=200)
             resp["Authorization"] = f"Bearer {new_access}"
+            resp.set_cookie("refresh_token", str(old_refresh), **JWT_COOKIE_SETTINGS)
 
-            # Rotation manuelle si nécessaire
-            if settings.SIMPLE_JWT.get("ROTATE_REFRESH_TOKENS", False):
-                new_refresh = RefreshToken.for_user(request.user)
-                resp.set_cookie(
-                    key="refresh_token",
-                    value=str(new_refresh),
-                    httponly=JWT_COOKIE_SETTINGS["httponly"],
-                    secure=JWT_COOKIE_SETTINGS["secure"],
-                    samesite=JWT_COOKIE_SETTINGS["samesite"],
-                    path=JWT_COOKIE_SETTINGS["path"],
-                    max_age=JWT_COOKIE_SETTINGS["max_age"],
-                )
-
+            # Expose headers pour frontend
+            expose = resp.get("Access-Control-Expose-Headers", "")
+            if "Authorization" not in expose:
+                resp["Access-Control-Expose-Headers"] = (expose + ", Authorization").strip(", ")
+            if "X-New-Access-Token" not in expose:
+                resp["Access-Control-Expose-Headers"] += ", X-New-Access-Token"
             return resp
-
         except TokenError:
-            return Response({"detail": "Refresh token invalide."}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({"detail": "Refresh token invalide ou expiré."}, status=401)
+        except get_user_model().DoesNotExist:
+            return Response({"detail": "Utilisateur introuvable ou inactif."}, status=401)
+        except Exception as e:
+            logger.exception(f"Erreur refresh: {e}")
+            return Response({"detail": "Erreur serveur."}, status=500)
 
-from rest_framework import viewsets, permissions, filters
-from rest_framework.pagination import PageNumberPagination
-from .models import AgentIA
-from .serializers import AgentIASerializer
-from .permissions import IsAdminOrOwner
-
+# -------- Agent IA CRUD --------
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 100
 
 class AgentIAViewSet(viewsets.ModelViewSet):
-    """
-    CRUD complet pour les agents IA avec pagination, recherche et permissions.
-    """
     queryset = AgentIA.objects.all().order_by("-date_creation")
     serializer_class = AgentIASerializer
-    permission_classes = [permissions.IsAuthenticated, IsAdminOrOwner]
+    permission_classes = [permissions.IsAuthenticated]
     pagination_class = StandardResultsSetPagination
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['nom', 'description']
-    ordering_fields = ['date_creation', 'nom']
-    ordering = ['-date_creation']
+    search_fields = ["nom", "description"]
+    ordering_fields = ["date_creation", "nom"]
+    ordering = ["-date_creation"]
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
-            return AgentIA.objects.all()
-        return AgentIA.objects.filter(proprietaire=user)
+        return AgentIA.objects.all() if user.is_staff else AgentIA.objects.filter(proprietaire=user)
 
     def perform_create(self, serializer):
-        print(f"[DEBUG] Création agent pour user {self.request.user.email}")
         serializer.save(proprietaire=self.request.user)
-        
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
             self.perform_create(serializer)
         except Exception as e:
-            print(f"[ERROR CREATE] {e}")
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
+            logger.exception(f"[ERROR CREATE] {e}")
+            return Response({"detail": str(e)}, status=400)
         headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        return Response(serializer.data, status=201, headers=headers)
