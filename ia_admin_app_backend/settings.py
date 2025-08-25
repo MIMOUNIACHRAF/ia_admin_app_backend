@@ -16,7 +16,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://ia-admin-app.netlify.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
-CORS_ORIGIN_ALLOW_ALL = True  # En dev uniquement
+CORS_ORIGIN_ALLOW_ALL = True  # ⚠ uniquement en dev
 CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]
 CORS_ALLOW_HEADERS = [
     "accept", "accept-encoding", "authorization", "content-type",
@@ -32,16 +32,16 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
-
     "auth_admin",
+    "axes",  # 🔐 django-axes pour la protection bruteforce
 ]
 
 # Middleware
 MIDDLEWARE = [
+    "axes.middleware.AxesMiddleware",  # doit être AVANT AuthenticationMiddleware
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -53,6 +53,13 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# Configuration django-axes (anti bruteforce)
+AXES_FAILURE_LIMIT = 5                        # 5 tentatives max
+AXES_COOLOFF_TIME = timedelta(minutes=15)     # blocage IP pendant 15 min
+AXES_ONLY_USER_FAILURES = False               # bloque par IP, pas seulement utilisateur
+AXES_LOCKOUT_PARAMETERS = ['ip_address']      # blocage basé sur IP
+AXES_HANDLER = 'axes.handlers.database.AxesDatabaseHandler'
 
 ROOT_URLCONF = "ia_admin_app_backend.urls"
 
@@ -110,7 +117,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Django REST Framework
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "auth_admin.authentication.MiddlewareAwareJWTAuthentication",  # <- nouvelle auth class
+        "auth_admin.authentication.MiddlewareAwareJWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -129,7 +136,7 @@ CACHES = {
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=3),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
-    "ROTATE_REFRESH_TOKENS": False,  # plus de blacklist
+    "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
     "ALGORITHM": "HS256",
     "SIGNING_KEY": SECRET_KEY,

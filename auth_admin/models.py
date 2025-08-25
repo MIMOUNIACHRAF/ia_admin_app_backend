@@ -1,6 +1,6 @@
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
-
+from django.utils import timezone
 class AdminUserManager(BaseUserManager):
     def create_user(self, email, password=None):
         """
@@ -90,3 +90,17 @@ class QuestionReponse(models.Model):
 
     def __str__(self):
         return f"Q: {self.question[:50]}"
+
+
+class FailedLoginAttempt(models.Model):
+    ip_address = models.GenericIPAddressField(unique=True, db_index=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    blocked_until = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def is_blocked(self):
+        return self.blocked_until and self.blocked_until > timezone.now()
+
+    def __str__(self):
+        return f"{self.ip_address} ({self.attempts})"

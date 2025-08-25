@@ -4,11 +4,11 @@ from django.contrib.auth.forms import ReadOnlyPasswordHashField
 from django.core.exceptions import ValidationError
 from django import forms
 
-from .models import AdminUser,AgentIA,QuestionReponse
+from .models import AdminUser, AgentIA, QuestionReponse
 
+# -------- Forms Utilisateurs --------
 class UserCreationForm(forms.ModelForm):
-    """A form for creating new users. Includes all the required
-    fields, plus a repeated password."""
+    """Formulaire pour créer un nouvel utilisateur."""
     password1 = forms.CharField(label='Password', widget=forms.PasswordInput)
     password2 = forms.CharField(label='Password confirmation', widget=forms.PasswordInput)
 
@@ -17,7 +17,6 @@ class UserCreationForm(forms.ModelForm):
         fields = ('email',)
 
     def clean_password2(self):
-        # Check that the two password entries match
         password1 = self.cleaned_data.get("password1")
         password2 = self.cleaned_data.get("password2")
         if password1 and password2 and password1 != password2:
@@ -25,7 +24,6 @@ class UserCreationForm(forms.ModelForm):
         return password2
 
     def save(self, commit=True):
-        # Save the provided password in hashed format
         user = super().save(commit=False)
         user.set_password(self.cleaned_data["password1"])
         if commit:
@@ -33,32 +31,23 @@ class UserCreationForm(forms.ModelForm):
         return user
 
 class UserChangeForm(forms.ModelForm):
-    """A form for updating users. Includes all the fields on
-    the user, but replaces the password field with admin's
-    disabled password hash display field.
-    """
+    """Formulaire pour modifier un utilisateur existant."""
     password = ReadOnlyPasswordHashField()
 
     class Meta:
         model = AdminUser
         fields = ('email', 'password', 'is_active', 'is_staff', 'is_superuser')
 
+# -------- Admin Utilisateurs --------
 class UserAdmin(BaseUserAdmin):
-    # The forms to add and change user instances
     form = UserChangeForm
     add_form = UserCreationForm
-
-    # The fields to be used in displaying the User model.
-    # These override the definitions on the base UserAdmin
-    # that reference specific fields on auth.User.
     list_display = ('email', 'is_staff')
     list_filter = ('is_superuser',)
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
     )
-    # add_fieldsets is not a standard ModelAdmin attribute. UserAdmin
-    # overrides get_fieldsets to use this attribute when creating a user.
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
@@ -69,13 +58,9 @@ class UserAdmin(BaseUserAdmin):
     ordering = ('email',)
     filter_horizontal = ('groups', 'user_permissions',)
 
-# Now register the new UserAdmin...
 admin.site.register(AdminUser, UserAdmin)
 
-
-from django.contrib import admin
-from .models import AgentIA, QuestionReponse
-
+# -------- Admin AgentIA --------
 class QuestionReponseInline(admin.TabularInline):
     model = QuestionReponse
     extra = 1
@@ -85,7 +70,11 @@ class AgentIAAdmin(admin.ModelAdmin):
     list_display = ('nom', 'type_agent', 'actif', 'proprietaire', 'date_creation')
     inlines = [QuestionReponseInline]
 
-# Enregistre QuestionReponse si tu souhaites l’éditer indépendamment aussi
 @admin.register(QuestionReponse)
 class QuestionReponseAdmin(admin.ModelAdmin):
     list_display = ('question', 'agent')
+
+# -------- Astuce pour django-axes --------
+# Ne jamais réenregistrer AccessAttempt et AccessLog directement
+# car ils sont déjà enregistrés par axes.admin pour éviter AlreadyRegistered.
+# Si tu veux personnaliser leur affichage, utilise AppConfig.ready() et unregister/register.
