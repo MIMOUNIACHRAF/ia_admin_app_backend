@@ -152,7 +152,7 @@ JWT_COOKIE_SETTINGS = {
     "httponly": True,
     "secure": True,  # True seulement si HTTPS
     "samesite": "None",  # important pour cross-origin
-    "path": "/api/auth/",  # met le path exact de tes endpoints auth
+    "path": "/",  # met le path exact de tes endpoints auth
     "max_age": 7 * 24 * 60 * 60,
 }
 
