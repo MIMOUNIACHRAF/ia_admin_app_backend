@@ -68,11 +68,11 @@ class AdminTokenObtainPairView(TokenObtainPairView):
         response.set_cookie(
             key="refresh_token",
             value=refresh_str,
-            httponly=cfg.get("httponly", True),
-            secure=cfg.get("secure", False),
-            samesite=cfg.get("samesite", "Lax"),
-            path=cfg.get("path", "/"),
-            max_age=cfg.get("max_age", 7*24*60*60),
+            httponly=True,
+            secure=True,           # HTTPS obligatoire
+            samesite="Strict",     # ou "None" si cross-site
+            path="/",
+            max_age=7*24*60*60,
         )
         response["Authorization"] = f"Bearer {access_str}"
         response.data.pop("refresh", None)
