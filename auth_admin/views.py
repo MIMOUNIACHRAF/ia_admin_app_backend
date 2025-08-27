@@ -69,8 +69,8 @@ class AdminTokenObtainPairView(TokenObtainPairView):
             key="refresh_token",
             value=refresh_str,
             httponly=True,
-            secure=True,           # HTTPS obligatoire
-            samesite="Strict",     # ou "None" si cross-site
+            secure=not settings.DEBUG,   # HTTPS obligatoire seulement en prod
+            samesite="Lax",              # compatible localhost
             path="/",
             max_age=7*24*60*60,
         )
