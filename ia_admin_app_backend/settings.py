@@ -150,8 +150,8 @@ SIMPLE_JWT = {
 
 JWT_COOKIE_SETTINGS = {
     "httponly": True,
-    "secure": not DEBUG,
-    "samesite": "Lax",
+    "secure": True,
+    "samesite": "Strict",
     "path": "/",
     "max_age": 7 * 24 * 60 * 60,
 }
