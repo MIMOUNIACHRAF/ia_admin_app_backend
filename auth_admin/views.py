@@ -70,11 +70,7 @@ class AdminTokenObtainPairView(TokenObtainPairView):
         response.set_cookie(
             key="refresh_token",
             value=refresh_str,
-            httponly=True,
-            secure=True,
-            samesite="None",
-            path="/",
-           
+            **settings.JWT_COOKIE_SETTINGS
         )
 
         # Mettre l'access token dans le header
