@@ -4,27 +4,30 @@ from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY
+# --- SECURITY ---
 SECRET_KEY = os.getenv("SECRET_KEY", "default-secret-key")
 DEBUG = os.getenv("DEBUG", "False").strip().lower() == "true"
 ALLOWED_HOSTS = ["*"]
 
-# CORS
+# --- ENVIRONMENT ---
+IS_PROD = not DEBUG  # True en production (Netlify / PythonAnywhere)
+
+# --- CORS ---
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "https://achrafpapaza.pythonanywhere.com",
     "https://ia-admin-app.netlify.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
-CORS_ORIGIN_ALLOW_ALL = True  # ⚠ uniquement en dev
+CORS_ORIGIN_ALLOW_ALL = False
 CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]
 CORS_ALLOW_HEADERS = [
-    "accept", "accept-encoding", "authorization", "content-type",
-    "dnt", "origin", "user-agent", "x-csrftoken", "x-requested-with",
+    "accept","accept-encoding","authorization","content-type",
+    "dnt","origin","user-agent","x-csrftoken","x-requested-with",
 ]
 CORS_EXPOSE_HEADERS = ["Authorization", "X-New-Access-Token"]
 
-# Applications
+# --- INSTALLED APPS ---
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -39,9 +42,9 @@ INSTALLED_APPS = [
     "axes",  # 🔐 django-axes pour la protection bruteforce
 ]
 
-# Middleware
+# --- MIDDLEWARE ---
 MIDDLEWARE = [
-    "axes.middleware.AxesMiddleware",  # doit être AVANT AuthenticationMiddleware
+    "axes.middleware.AxesMiddleware",  # avant AuthenticationMiddleware
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -54,11 +57,11 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-# Configuration django-axes (anti bruteforce)
-AXES_FAILURE_LIMIT = 5                        # 5 tentatives max
-AXES_COOLOFF_TIME = timedelta(minutes=15)     # blocage IP pendant 15 min
-AXES_ONLY_USER_FAILURES = False               # bloque par IP, pas seulement utilisateur
-AXES_LOCKOUT_PARAMETERS = ['ip_address']      # blocage basé sur IP
+# --- AXES CONFIGURATION ---
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = timedelta(minutes=15)
+AXES_ONLY_USER_FAILURES = False
+AXES_LOCKOUT_PARAMETERS = ['ip_address']
 AXES_HANDLER = 'axes.handlers.database.AxesDatabaseHandler'
 
 ROOT_URLCONF = "ia_admin_app_backend.urls"
@@ -81,7 +84,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "ia_admin_app_backend.wsgi.application"
 
-# Database
+# --- DATABASE ---
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -89,7 +92,7 @@ DATABASES = {
     }
 }
 
-# Auth
+# --- AUTH ---
 AUTH_USER_MODEL = "auth_admin.AdminUser"
 
 # Password validators
@@ -100,21 +103,21 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-# Internationalisation
+# --- INTERNATIONALISATION ---
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-# Static files
+# --- STATIC FILES ---
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
-# Default primary key
+# --- DEFAULT PK ---
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Django REST Framework
+# --- REST FRAMEWORK ---
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "auth_admin.authentication.MiddlewareAwareJWTAuthentication",
@@ -124,7 +127,7 @@ REST_FRAMEWORK = {
     ],
 }
 
-# Cache
+# --- CACHE ---
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
@@ -132,7 +135,7 @@ CACHES = {
     }
 }
 
-# JWT
+# --- SIMPLE JWT ---
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=3),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
@@ -141,23 +144,22 @@ SIMPLE_JWT = {
     "ALGORITHM": "HS256",
     "SIGNING_KEY": SECRET_KEY,
     "AUTH_HEADER_TYPES": ("Bearer",),
-    "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
     "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
     "TOKEN_TYPE_CLAIM": "token_type",
 }
 
+# --- JWT COOKIE SETTINGS ---
 JWT_COOKIE_SETTINGS = {
     "httponly": True,
-    "secure": True,  # True seulement si HTTPS
-    "samesite": "None",  # important pour cross-origin
-    "path": "/",  # met le path exact de tes endpoints auth
-    "max_age": 7 * 24 * 60 * 60,
+    "secure": IS_PROD,  # HTTPS obligatoire en prod
+    "samesite": "None" if IS_PROD else "Lax",  # cross-origin en prod, Lax en dev
+    "path": "/",  # chemin cookie global
+    "max_age": 7 * 24 * 60 * 60,  # 7 jours
 }
 
-
-# Logging
+# --- LOGGING ---
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

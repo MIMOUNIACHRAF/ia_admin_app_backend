@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
-from axes.handlers.proxy import AxesProxyHandler  # nouveau
+from axes.handlers.proxy import AxesProxyHandler
 from .serializers import AdminTokenObtainPairSerializer, AdminUserSerializer, AgentIASerializer
 from .models import AgentIA
 from rest_framework.pagination import PageNumberPagination
@@ -15,6 +15,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# --- JWT cookie settings ---
 JWT_COOKIE_SETTINGS = getattr(settings, "JWT_COOKIE_SETTINGS", {
     "httponly": True,
     "secure": not settings.DEBUG,
@@ -31,9 +32,7 @@ def get_client_ip(request):
     return request.META.get("REMOTE_ADDR")
 
 def is_locked(request) -> bool:
-    """
-    Vérifie si la requête est bloquée par django-axes (Axes 8+).
-    """
+    """Vérifie si la requête est bloquée par django-axes"""
     handler = AxesProxyHandler()
     return handler.is_locked(request)
 
@@ -46,7 +45,7 @@ class AdminTokenObtainPairView(TokenObtainPairView):
         ip = get_client_ip(request)
         username = request.data.get("username", "")
 
-        # Vérifie si la requête est bloquée par Axes
+        # Blocage brute-force
         if is_locked(request):
             return Response(
                 {"detail": "Trop de tentatives de connexion. Veuillez réessayer plus tard."},
@@ -64,25 +63,28 @@ class AdminTokenObtainPairView(TokenObtainPairView):
         if not refresh_str or not access_str:
             return Response({"detail": "Erreur génération tokens."}, status=500)
 
-        cfg = JWT_COOKIE_SETTINGS
+        # Cookie settings dynamiques
+        samesite = "None" if not settings.DEBUG else "Lax"
+        secure = True if not settings.DEBUG else False
+
+        # --- Set cookie HttpOnly pour refresh token ---
         response.set_cookie(
             key="refresh_token",
             value=refresh_str,
             httponly=True,
-            secure=not settings.DEBUG,   # HTTPS obligatoire seulement en prod
-            samesite="Lax",              # compatible localhost
+            secure=secure,
+            samesite=samesite,
             path="/",
             max_age=7*24*60*60,
         )
+
         response["Authorization"] = f"Bearer {access_str}"
         response.data.pop("refresh", None)
         response["Access-Control-Expose-Headers"] = "Authorization, X-New-Access-Token"
 
         return response
 
-# -------- Le reste du code (AdminUserView, LogoutView, CustomTokenRefreshView, AgentIAViewSet) reste identique --------
-
-
+# -------- User info --------
 class AdminUserView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -90,14 +92,20 @@ class AdminUserView(APIView):
         serializer = AdminUserSerializer(request.user)
         return Response(serializer.data)
 
+# -------- Logout --------
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         resp = Response({"detail": "Déconnecté"}, status=200)
-        resp.delete_cookie("refresh_token", path=JWT_COOKIE_SETTINGS.get("path", "/"))
+        # Supprime le refresh token
+        resp.delete_cookie(
+            "refresh_token",
+            path=JWT_COOKIE_SETTINGS.get("path", "/"),
+        )
         return resp
 
+# -------- Refresh token --------
 class CustomTokenRefreshView(APIView):
     permission_classes = [AllowAny]
 
@@ -111,6 +119,7 @@ class CustomTokenRefreshView(APIView):
             User = get_user_model()
             user = User.objects.get(id=user_id, is_active=True)
 
+            # Nouveau access token
             new_access = str(old_refresh.access_token)
 
             resp = Response({"access": new_access}, status=200)
