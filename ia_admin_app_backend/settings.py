@@ -175,3 +175,8 @@ LOGGING = {
         "auth_admin.middleware": {"handlers": ["console"], "level": "DEBUG", "propagate": False},
     },
 }
+CSRF_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_SECURE = IS_PROD
+SESSION_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SECURE = IS_PROD
+

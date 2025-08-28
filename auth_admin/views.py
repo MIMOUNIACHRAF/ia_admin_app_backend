@@ -63,11 +63,10 @@ class AdminTokenObtainPairView(TokenObtainPairView):
         if not refresh_str or not access_str:
             return Response({"detail": "Erreur génération tokens."}, status=500)
 
-        # Cookie settings dynamiques
+        # Cookie settings
         samesite = "None" if not settings.DEBUG else "Lax"
         secure = True if not settings.DEBUG else False
 
-        # --- Set cookie HttpOnly pour refresh token ---
         response.set_cookie(
             key="refresh_token",
             value=refresh_str,
@@ -75,12 +74,19 @@ class AdminTokenObtainPairView(TokenObtainPairView):
             secure=secure,
             samesite=samesite,
             path="/",
-            max_age=7*24*60*60,
+            max_age=7*24*60*60,  # 7 jours
         )
 
+        # Mettre l'access token dans le header
         response["Authorization"] = f"Bearer {access_str}"
-        response.data.pop("refresh", None)
         response["Access-Control-Expose-Headers"] = "Authorization, X-New-Access-Token"
+
+        # Important pour Netlify (cross-domain)
+        response["Access-Control-Allow-Credentials"] = "true"
+        response["Access-Control-Allow-Origin"] = "https://ia-admin-app.netlify.app"
+
+        # Ne pas exposer le refresh token dans le body
+        response.data.pop("refresh", None)
 
         return response
 
