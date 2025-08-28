@@ -71,10 +71,10 @@ class AdminTokenObtainPairView(TokenObtainPairView):
             key="refresh_token",
             value=refresh_str,
             httponly=True,
-            secure=secure,
-            samesite=samesite,
+            secure=True,
+            samesite="None",
             path="/",
-            max_age=7*24*60*60,  # 7 jours
+           
         )
 
         # Mettre l'access token dans le header
