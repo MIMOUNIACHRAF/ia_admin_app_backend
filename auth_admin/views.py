@@ -15,15 +15,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# --- JWT cookie settings ---
-JWT_COOKIE_SETTINGS = getattr(settings, "JWT_COOKIE_SETTINGS", {
-    "httponly": True,
-    "secure": not settings.DEBUG,
-    "samesite": "Lax",
-    "path": "/",
-    "max_age": 7*24*60*60,
-})
-
 # -------- Utilitaires --------
 def get_client_ip(request):
     x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
@@ -61,23 +52,16 @@ class AdminTokenObtainPairView(TokenObtainPairView):
         if not refresh_str or not access_str:
             return Response({"detail": "Erreur génération tokens."}, status=500)
 
-        # Stocker le refresh token dans le cookie HttpOnly
-        response.set_cookie(
-            key="refresh_token",
-            value=refresh_str,
-            **JWT_COOKIE_SETTINGS
+        # ✅ Ne plus stocker le refresh token dans le cookie ici
+        # Frontend React/Netlify s'en occupe désormais
+
+        return Response(
+            {
+                "access": access_str,
+                "refresh": refresh_str
+            },
+            status=200
         )
-
-        # Mettre l'access token dans le header pour ce premier accès
-        response["Authorization"] = f"Bearer {access_str}"
-        response["Access-Control-Expose-Headers"] = "Authorization, X-New-Access-Token"
-        response["Access-Control-Allow-Credentials"] = "true"
-        response["Access-Control-Allow-Origin"] = "https://ia-admin-app.netlify.app"
-
-        # Ne pas exposer le refresh token dans le body
-        response.data.pop("refresh", None)
-
-        return response
 
 # -------- User info --------
 class AdminUserView(APIView):
@@ -93,10 +77,8 @@ class LogoutView(APIView):
 
     def post(self, request):
         resp = Response({"detail": "Déconnecté"}, status=200)
-        resp.delete_cookie(
-            "refresh_token",
-            path=JWT_COOKIE_SETTINGS.get("path", "/"),
-        )
+        # Optionnel : supprimer le cookie si présent
+        resp.delete_cookie("refresh_token")
         return resp
 
 # -------- Refresh token --------
@@ -104,27 +86,24 @@ class CustomTokenRefreshView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        refresh_cookie = request.COOKIES.get("refresh_token")
-        if not refresh_cookie:
+        # Accept refresh token from body JSON or cookie
+        refresh_token = request.data.get("refresh") or request.COOKIES.get("refresh_token")
+        if not refresh_token:
             return Response({"detail": "Refresh token absent."}, status=401)
         try:
-            old_refresh = RefreshToken(refresh_cookie)
+            old_refresh = RefreshToken(refresh_token)
             user_id = old_refresh.get(settings.SIMPLE_JWT.get("USER_ID_CLAIM", "user_id"))
             User = get_user_model()
             user = User.objects.get(id=user_id, is_active=True)
 
-            # Générer un nouvel access token
+            # Nouveau access token
             new_access = str(old_refresh.access_token)
 
-            resp = Response({"access": new_access}, status=200)
-            resp["Authorization"] = f"Bearer {new_access}"
-            resp.set_cookie("refresh_token", str(old_refresh), **JWT_COOKIE_SETTINGS)
-            resp["Access-Control-Expose-Headers"] = "Authorization, X-New-Access-Token"
+            return Response({"access": new_access}, status=200)
 
-            return resp
         except TokenError:
             return Response({"detail": "Refresh token invalide ou expiré."}, status=401)
-        except get_user_model().DoesNotExist:
+        except User.DoesNotExist:
             return Response({"detail": "Utilisateur introuvable ou inactif."}, status=401)
         except Exception as e:
             logger.exception(f"Erreur refresh: {e}")
