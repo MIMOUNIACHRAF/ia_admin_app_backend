@@ -32,7 +32,6 @@ def get_client_ip(request):
     return request.META.get("REMOTE_ADDR")
 
 def is_locked(request) -> bool:
-    """Vérifie si la requête est bloquée par django-axes"""
     handler = AxesProxyHandler()
     return handler.is_locked(request)
 
@@ -45,7 +44,6 @@ class AdminTokenObtainPairView(TokenObtainPairView):
         ip = get_client_ip(request)
         username = request.data.get("username", "")
 
-        # Blocage brute-force
         if is_locked(request):
             return Response(
                 {"detail": "Trop de tentatives de connexion. Veuillez réessayer plus tard."},
@@ -63,21 +61,16 @@ class AdminTokenObtainPairView(TokenObtainPairView):
         if not refresh_str or not access_str:
             return Response({"detail": "Erreur génération tokens."}, status=500)
 
-        # Cookie settings
-        samesite = "None" if not settings.DEBUG else "Lax"
-        secure = True if not settings.DEBUG else False
-
+        # Stocker le refresh token dans le cookie HttpOnly
         response.set_cookie(
             key="refresh_token",
             value=refresh_str,
-            **settings.JWT_COOKIE_SETTINGS
+            **JWT_COOKIE_SETTINGS
         )
 
-        # Mettre l'access token dans le header
+        # Mettre l'access token dans le header pour ce premier accès
         response["Authorization"] = f"Bearer {access_str}"
         response["Access-Control-Expose-Headers"] = "Authorization, X-New-Access-Token"
-
-        # Important pour Netlify (cross-domain)
         response["Access-Control-Allow-Credentials"] = "true"
         response["Access-Control-Allow-Origin"] = "https://ia-admin-app.netlify.app"
 
@@ -100,7 +93,6 @@ class LogoutView(APIView):
 
     def post(self, request):
         resp = Response({"detail": "Déconnecté"}, status=200)
-        # Supprime le refresh token
         resp.delete_cookie(
             "refresh_token",
             path=JWT_COOKIE_SETTINGS.get("path", "/"),
@@ -121,7 +113,7 @@ class CustomTokenRefreshView(APIView):
             User = get_user_model()
             user = User.objects.get(id=user_id, is_active=True)
 
-            # Nouveau access token
+            # Générer un nouvel access token
             new_access = str(old_refresh.access_token)
 
             resp = Response({"access": new_access}, status=200)

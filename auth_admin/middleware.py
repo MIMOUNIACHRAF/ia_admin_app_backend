@@ -13,11 +13,10 @@ logger = logging.getLogger(__name__)
 
 class RefreshAccessMiddleware(MiddlewareMixin):
     """
-    Middleware strict avec rotation d'Access Token :
-    - Access token requis
-    - Vérifie correspondance avec refresh token
-    - Vérifie la syntaxe de l'access token
-    - Si expiré mais valide → génère un nouveau access token
+    Middleware pour rotation automatique d'Access Token via refresh token stocké en cookie HttpOnly.
+    - Access token peut être absent : généré depuis refresh token
+    - Vérifie correspondance access ↔ refresh
+    - Si access token expiré ou absent, un nouveau est généré
     """
 
     def process_request(self, request):
@@ -34,14 +33,12 @@ class RefreshAccessMiddleware(MiddlewareMixin):
             logger.debug("[RefreshAccessMiddleware] Refresh token absent.")
             return self._unauthorized_response("Refresh token absent ou expiré.")
 
-        # Vérifie refresh token d'abord
         try:
             refresh = RefreshToken(refresh_cookie)
         except TokenError:
             logger.debug("[RefreshAccessMiddleware] Refresh token invalide ou expiré.")
             return self._unauthorized_response("Refresh token invalide ou expiré.")
 
-        # Récupérer l'utilisateur
         user_id_claim = settings.SIMPLE_JWT.get("USER_ID_CLAIM", "user_id")
         refresh_uid = refresh.get(user_id_claim)
         User = get_user_model()
@@ -51,46 +48,41 @@ class RefreshAccessMiddleware(MiddlewareMixin):
             logger.debug("[RefreshAccessMiddleware] Utilisateur inexistant ou inactif.")
             return self._unauthorized_response("Utilisateur inexistant ou inactif.")
 
-        # Récupérer l'access token
-        auth_header = get_authorization_header(request).decode("utf-8")
-        if not auth_header or not auth_header.lower().startswith("bearer "):
-            logger.debug("[RefreshAccessMiddleware] Access token absent.")
-            return self._unauthorized_response("Access token absent.")
+        # Récupérer access token depuis header Authorization
+        auth_header_bytes = get_authorization_header(request)
+        auth_header = auth_header_bytes.decode("utf-8") if auth_header_bytes else None
+        access_token_str = auth_header.split(" ", 1)[1].strip() if auth_header and auth_header.lower().startswith("bearer ") else None
 
-        access_token_str = auth_header.split(" ", 1)[1].strip()
-        if not access_token_str:
-            logger.debug("[RefreshAccessMiddleware] Access token vide.")
-            return self._unauthorized_response("Access token vide.")
-
-        # Vérifier syntaxe JWT (décodage sans vérifier expiration)
         try:
-            decoded = jwt.decode(
-                access_token_str,
-                settings.SIMPLE_JWT["SIGNING_KEY"],
-                algorithms=[settings.SIMPLE_JWT["ALGORITHM"]],
-                options={"verify_exp": False}  # ignore l'expiration
-            )
-            if str(decoded.get(user_id_claim)) != str(user.id):
-                logger.debug("[RefreshAccessMiddleware] Access token non compatible avec refresh.")
-                return self._unauthorized_response("Access token invalide pour ce refresh token.")
+            if access_token_str:
+                decoded = jwt.decode(
+                    access_token_str,
+                    settings.SIMPLE_JWT["SIGNING_KEY"],
+                    algorithms=[settings.SIMPLE_JWT["ALGORITHM"]],
+                    options={"verify_exp": False}
+                )
+                if str(decoded.get(user_id_claim)) != str(user.id):
+                    return self._unauthorized_response("Access token invalide pour ce refresh token.")
 
-            # Essayer de créer l'AccessToken pour détecter expiration
-            try:
-                AccessToken(access_token_str)
-                request.user = user
-                logger.debug(f"[RefreshAccessMiddleware] Accès autorisé pour {user.email}")
-            except TokenError:
-                # Token expiré mais syntaxe correcte → rotation
+                try:
+                    AccessToken(access_token_str)
+                    request.user = user
+                    logger.debug(f"[RefreshAccessMiddleware] Accès autorisé pour {user.email}")
+                except TokenError:
+                    # Token expiré → rotation
+                    new_access = str(refresh.access_token)
+                    request.META["NEW_ACCESS_TOKEN"] = new_access
+                    request.user = user
+                    logger.debug(f"[RefreshAccessMiddleware] Nouveau access token généré pour {user.email}")
+            else:
+                # Aucun access token envoyé → générer un nouveau depuis le refresh token
                 new_access = str(refresh.access_token)
                 request.META["NEW_ACCESS_TOKEN"] = new_access
                 request.user = user
-                logger.debug(f"[RefreshAccessMiddleware] Nouveau access token généré pour {user.email}")
+                logger.debug(f"[RefreshAccessMiddleware] Access token absent → nouveau généré pour {user.email}")
 
         except (jwt.DecodeError, jwt.InvalidTokenError):
-            # Token mal formé → 401
-            logger.debug("[RefreshAccessMiddleware] Access token mal formé ou invalide.")
-            return self._unauthorized_response("Access token invalide ou mal formé.")
-
+            return self._unauthorized_response("Access token mal formé ou invalide.")
         except Exception as e:
             logger.exception(f"[RefreshAccessMiddleware] Erreur middleware: {e}")
             return self._unauthorized_response("Erreur serveur.")
