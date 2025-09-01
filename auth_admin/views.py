@@ -86,10 +86,15 @@ class CustomTokenRefreshView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        # Accept refresh token from body JSON or cookie
-        refresh_token = request.data.get("refresh") or request.COOKIES.get("refresh_token")
+        # Récupérer depuis body ou headers
+        refresh_token = (
+            request.data.get("refresh") or
+            request.COOKIES.get("refresh_token") or
+            request.headers.get("X-Refresh-Token")  # ⚡ header
+        )
         if not refresh_token:
             return Response({"detail": "Refresh token absent."}, status=401)
+
         try:
             old_refresh = RefreshToken(refresh_token)
             user_id = old_refresh.get(settings.SIMPLE_JWT.get("USER_ID_CLAIM", "user_id"))
@@ -108,6 +113,7 @@ class CustomTokenRefreshView(APIView):
         except Exception as e:
             logger.exception(f"Erreur refresh: {e}")
             return Response({"detail": "Erreur serveur."}, status=500)
+
 
 # -------- Agent IA CRUD --------
 class StandardResultsSetPagination(PageNumberPagination):
