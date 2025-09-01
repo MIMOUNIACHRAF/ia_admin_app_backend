@@ -22,10 +22,18 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ORIGIN_ALLOW_ALL = False
 CORS_ALLOW_METHODS = ["DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT"]
 CORS_ALLOW_HEADERS = [
-    "accept","accept-encoding","authorization","content-type",
-    "dnt","origin","user-agent","x-csrftoken","x-requested-with",
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-refresh-token",  # ⚡ Ajouté pour ton header custom
 ]
-CORS_EXPOSE_HEADERS = ["Authorization", "X-New-Access-Token"]
+CORS_EXPOSE_HEADERS = ["Authorization", "X-New-Access-Token", "X-Refresh-Token"]
 
 # --- INSTALLED APPS ---
 INSTALLED_APPS = [
