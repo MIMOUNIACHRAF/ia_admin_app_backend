@@ -6,7 +6,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework_simplejwt.tokens import RefreshToken, TokenError,TokenBackend
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+from rest_framework_simplejwt.backends import TokenBackend
 from axes.handlers.proxy import AxesProxyHandler
 from .serializers import AdminTokenObtainPairSerializer, AdminUserSerializer, AgentIASerializer
 from .models import AgentIA
