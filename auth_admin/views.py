@@ -92,6 +92,8 @@ class CustomTokenRefreshView(APIView):
             request.COOKIES.get("refresh_token") or
             request.headers.get("X-Refresh-Token")
         )
+        logger.debug("DEBUG refresh_token: %s", refresh_token)
+
         if not refresh_token:
             return Response({"detail": "Refresh token absent."}, status=401)
 
