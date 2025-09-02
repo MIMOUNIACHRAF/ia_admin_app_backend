@@ -5,7 +5,6 @@ from datetime import timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- SECURITY ---
-SECRET_KEY = os.getenv("SECRET_KEY", "default-secret-key")
 DEBUG = os.getenv("DEBUG", "False").strip().lower() == "true"
 ALLOWED_HOSTS = ["*"]
 
@@ -132,6 +131,8 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
+        
+
     ],
 }
 
@@ -142,6 +143,7 @@ CACHES = {
         'LOCATION': 'my_cache_table',
     }
 }
+SECRET_KEY = os.getenv("SECRET_KEY", "z@a7$#)jwn2m6gj)9gj4(u+ldd(mz8g&2(9#92l=8-w9-+&g@8")
 
 # --- SIMPLE JWT ---
 SIMPLE_JWT = {
@@ -187,4 +189,6 @@ CSRF_COOKIE_SAMESITE = "None"
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = "None"
 SESSION_COOKIE_SECURE = True
+
+
 
