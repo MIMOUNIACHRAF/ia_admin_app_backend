@@ -143,7 +143,7 @@ CACHES = {
         'LOCATION': 'my_cache_table',
     }
 }
-SECRET_KEY = os.getenv("SECRET_KEY", "z@a7$#)jwn2m6gj)9gj4(u+ldd(mz8g&2(9#92l=8-w9-+&g@8")
+SECRET_KEY = "z@a7$#)jwn2m6gj)9gj4(u+ldd(mz8g&2(9#92l=8-w9-+&g@8"
 
 # --- SIMPLE JWT ---
 SIMPLE_JWT = {
