@@ -92,42 +92,17 @@ class CustomTokenRefreshView(APIView):
             request.COOKIES.get("refresh_token") or
             request.headers.get("X-Refresh-Token")
         )
-        logger.debug("DEBUG refresh_token: %s", refresh_token)
-
         if not refresh_token:
             return Response({"detail": "Refresh token absent."}, status=401)
 
         try:
-            # Tentative de décodage (signature + payload)
-            token_backend = TokenBackend(
-                algorithm=settings.SIMPLE_JWT["ALGORITHM"],
-                signing_key=settings.SIMPLE_JWT["SIGNING_KEY"],
-                verify_signature=True,
-            )
-            payload = token_backend.decode(refresh_token, verify=True)
-
-            # Vérifier le type de token
-            if payload.get("token_type") != "refresh":
-                return Response({"detail": "Ce n’est pas un refresh token."}, status=401)
-
-            # Vérifier l’expiration
-            old_refresh = RefreshToken(refresh_token)
-            old_refresh.check_exp()
-
-            # Vérifier utilisateur actif
-            user_id = payload.get(settings.SIMPLE_JWT.get("USER_ID_CLAIM", "user_id"))
-            User = get_user_model()
-            user = User.objects.get(id=user_id, is_active=True)
-
-            # Générer un nouvel access
-            new_access = str(old_refresh.access_token)
+            # ✅ Seul RefreshToken suffit
+            refresh = RefreshToken(refresh_token)
+            new_access = str(refresh.access_token)
             return Response({"access": new_access}, status=200)
-
         except TokenError as e:
             return Response({"detail": f"Refresh expiré ou invalide: {str(e)}"}, status=401)
-        except Exception as e:
-            # Si c’est une vraie fausse chaîne -> decode() va lever une Exception de signature
-            return Response({"detail": "Token invalide (signature incorrecte ou falsifié)."}, status=401)
+
 
 
 # -------- Agent IA CRUD --------
