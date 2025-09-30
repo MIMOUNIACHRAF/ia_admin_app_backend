@@ -13,10 +13,10 @@ logger = logging.getLogger(__name__)
 
 class RefreshAccessMiddleware(MiddlewareMixin):
     """
-    Middleware pour rotation automatique d'Access Token via refresh token stocké en cookie HttpOnly.
-    - Access token peut être absent : généré depuis refresh token
-    - Vérifie correspondance access ↔ refresh
-    - Si access token expiré ou absent, un nouveau est généré
+    Middleware pour rotation automatique d'Access Token.
+    - Vérifie d'abord refresh_token en cookie HttpOnly
+    - Si absent, tente de le récupérer via le header `X-Refresh-Token`
+    - Si access token expiré ou absent → nouveau généré depuis refresh token
     """
 
     def process_request(self, request):
@@ -24,21 +24,26 @@ class RefreshAccessMiddleware(MiddlewareMixin):
             return
 
         path = request.path
-        public_paths = ["/api/auth/login/", "/api/auth/refresh/", "/api/auth/logout/"]
+        public_paths = ["/api/auth/login/", "/api/auth/refresh/", "/api/auth/logout/", "/admin/"]
         if any(path.startswith(p) for p in public_paths):
             return
 
+        # 1️⃣ Vérifier refresh_token d'abord en cookie, sinon en header
         refresh_cookie = request.COOKIES.get("refresh_token")
-        if not refresh_cookie:
+        refresh_header = request.headers.get("X-Refresh-Token")
+        refresh_token = refresh_cookie or refresh_header
+
+        if not refresh_token:
             logger.debug("[RefreshAccessMiddleware] Refresh token absent.")
             return self._unauthorized_response("Refresh token absent ou expiré.")
 
         try:
-            refresh = RefreshToken(refresh_cookie)
+            refresh = RefreshToken(refresh_token)
         except TokenError:
             logger.debug("[RefreshAccessMiddleware] Refresh token invalide ou expiré.")
             return self._unauthorized_response("Refresh token invalide ou expiré.")
 
+        # 2️⃣ Identifier l'utilisateur
         user_id_claim = settings.SIMPLE_JWT.get("USER_ID_CLAIM", "user_id")
         refresh_uid = refresh.get(user_id_claim)
         User = get_user_model()
@@ -48,10 +53,14 @@ class RefreshAccessMiddleware(MiddlewareMixin):
             logger.debug("[RefreshAccessMiddleware] Utilisateur inexistant ou inactif.")
             return self._unauthorized_response("Utilisateur inexistant ou inactif.")
 
-        # Récupérer access token depuis header Authorization
+        # 3️⃣ Vérifier access token (Authorization: Bearer <token>)
         auth_header_bytes = get_authorization_header(request)
         auth_header = auth_header_bytes.decode("utf-8") if auth_header_bytes else None
-        access_token_str = auth_header.split(" ", 1)[1].strip() if auth_header and auth_header.lower().startswith("bearer ") else None
+        access_token_str = (
+            auth_header.split(" ", 1)[1].strip()
+            if auth_header and auth_header.lower().startswith("bearer ")
+            else None
+        )
 
         try:
             if access_token_str:
@@ -75,7 +84,7 @@ class RefreshAccessMiddleware(MiddlewareMixin):
                     request.user = user
                     logger.debug(f"[RefreshAccessMiddleware] Nouveau access token généré pour {user.email}")
             else:
-                # Aucun access token envoyé → générer un nouveau depuis le refresh token
+                # Aucun access token → nouveau depuis refresh
                 new_access = str(refresh.access_token)
                 request.META["NEW_ACCESS_TOKEN"] = new_access
                 request.user = user
