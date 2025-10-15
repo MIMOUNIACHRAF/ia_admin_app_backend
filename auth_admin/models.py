@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
+from django.conf import settings
 class AdminUserManager(BaseUserManager):
     def create_user(self, email, password=None):
         """
@@ -56,9 +57,18 @@ class AdminUser(AbstractBaseUser, PermissionsMixin):
     def get_short_name(self):
         return self.email
     
-    
-from django.conf import settings
-from django.db import models
+class Template(models.Model):
+    """
+    Template regroupant plusieurs QuestionReponse réutilisables.
+    """
+    nom = models.CharField(max_length=255, unique=True)
+    description = models.TextField(blank=True)
+    date_creation = models.DateTimeField(default=timezone.now)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.nom
+
 
 class AgentIA(models.Model):
     TRADITIONNEL = 'trad'
@@ -73,6 +83,7 @@ class AgentIA(models.Model):
     type_agent = models.CharField(max_length=10, choices=AGENT_TYPES)
     proprietaire = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='agents')
     actif = models.BooleanField(default=True)
+    templates = models.ManyToManyField(Template, blank=True, related_name='agents')
     date_creation = models.DateTimeField(auto_now_add=True)
     date_modification = models.DateTimeField(auto_now=True)
 
@@ -84,14 +95,40 @@ class AgentIA(models.Model):
 
 
 class QuestionReponse(models.Model):
-    agent = models.ForeignKey(AgentIA, on_delete=models.CASCADE, related_name='questions_reponses')
+    """
+    QuestionReponse unified model:
+    - Either attached to an Agent (agent != None) -> custom Q/R for agent
+    - Or attached to a Template (template != None) -> reusable Q/R
+    - Constraint must be enforced in serializers/validators: one of agent or template must be set, not both.
+    """
+    agent = models.ForeignKey(AgentIA, on_delete=models.CASCADE, related_name='questions_reponses', null=True, blank=True)
+    template = models.ForeignKey(Template, on_delete=models.CASCADE, related_name='questions_reponses', null=True, blank=True)
     question = models.TextField()
     reponse = models.TextField()
+    ordre = models.PositiveIntegerField(default=0)
+
+    date_creation = models.DateTimeField(default=timezone.now)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['question']),
+        ]
+        ordering = ['ordre', '-date_creation']
+
+    def clean(self):
+        # optional: enforce in Python side if you use full_clean()
+        if bool(self.agent) == bool(self.template):
+            # both set or both not set => invalid
+            raise ValueError("QuestionReponse doit appartenir soit à un agent soit à un template (exactement un).")
 
     def __str__(self):
-        return f"Q: {self.question[:50]}"
-
-
+        owner = f"Agent:{self.agent_id}" if self.agent_id else f"Template:{self.template_id}"
+        return f"[{owner}] Q: {self.question[:50]}"
+    
+    
+    
+    
 class FailedLoginAttempt(models.Model):
     ip_address = models.GenericIPAddressField(unique=True, db_index=True)
     attempts = models.PositiveSmallIntegerField(default=0)

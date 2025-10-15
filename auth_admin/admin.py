@@ -4,7 +4,7 @@ from django.contrib.auth.forms import ReadOnlyPasswordHashField
 from django.core.exceptions import ValidationError
 from django import forms
 
-from .models import AdminUser, AgentIA, QuestionReponse
+from .models import AdminUser, AgentIA, QuestionReponse, Template
 
 # -------- Forms Utilisateurs --------
 class UserCreationForm(forms.ModelForm):
@@ -60,21 +60,41 @@ class UserAdmin(BaseUserAdmin):
 
 admin.site.register(AdminUser, UserAdmin)
 
-# -------- Admin AgentIA --------
-class QuestionReponseInline(admin.TabularInline):
+# -------- Admin Templates --------
+class QuestionReponseInlineTemplate(admin.TabularInline):
     model = QuestionReponse
     extra = 1
+    fields = ('question', 'reponse', 'ordre')
+    verbose_name = "Question/Réponse"
+    verbose_name_plural = "Questions/Réponses"
+
+@admin.register(Template)
+class TemplateAdmin(admin.ModelAdmin):
+    list_display = ('nom', 'description', 'date_creation', 'date_modification')
+    inlines = [QuestionReponseInlineTemplate]
+    search_fields = ('nom', 'description')
+    ordering = ('-date_creation',)
+
+# -------- Admin AgentIA --------
+class QuestionReponseInlineAgent(admin.TabularInline):
+    model = QuestionReponse
+    extra = 1
+    fields = ('question', 'reponse', 'ordre')
+    verbose_name = "Question/Réponse personnalisée"
+    verbose_name_plural = "Questions/Réponses personnalisées"
 
 @admin.register(AgentIA)
 class AgentIAAdmin(admin.ModelAdmin):
     list_display = ('nom', 'type_agent', 'actif', 'proprietaire', 'date_creation')
-    inlines = [QuestionReponseInline]
+    inlines = [QuestionReponseInlineAgent]
+    filter_horizontal = ('templates',)
+    search_fields = ('nom', 'description', 'templates__nom')
+    ordering = ('-date_creation',)
 
+# -------- Admin QuestionReponse standalone --------
 @admin.register(QuestionReponse)
 class QuestionReponseAdmin(admin.ModelAdmin):
-    list_display = ('question', 'agent')
-
-# -------- Astuce pour django-axes --------
-# Ne jamais réenregistrer AccessAttempt et AccessLog directement
-# car ils sont déjà enregistrés par axes.admin pour éviter AlreadyRegistered.
-# Si tu veux personnaliser leur affichage, utilise AppConfig.ready() et unregister/register.
+    list_display = ('question', 'reponse', 'agent', 'template', 'ordre')
+    list_filter = ('agent', 'template')
+    search_fields = ('question', 'reponse')
+    ordering = ('ordre', '-date_creation')
