@@ -190,7 +190,7 @@ class AgentIAViewSet(viewsets.ModelViewSet):
         """
         agent = self.get_object()
         user_question = (request.data.get("question") or "").strip()
-        threshold = float(request.data.get("threshold", 0.6))
+        threshold = float(request.data.get("threshold", 0.49))
 
         if not user_question:
             return Response({"detail": "Question manquante."}, status=400)
