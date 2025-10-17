@@ -103,6 +103,27 @@ class TemplateViewSet(viewsets.ModelViewSet):
     search_fields = ["nom", "description"]
     ordering_fields = ["date_creation", "nom"]
     ordering = ["-date_creation"]
+    @action(detail=True, methods=["post"], url_path="import-questions")
+    def import_questions(self, request, pk=None):
+        template = self.get_object()
+        questions = request.data.get("questions", [])
+        if not isinstance(questions, list):
+            return Response({"detail": "Questions doivent être un tableau."}, status=400)
+
+        created_qr = []
+        for q in questions:
+            question_text = q.get("question")
+            reponse_text = q.get("reponse")
+            ordre = q.get("ordre", 0)
+            if question_text and reponse_text:
+                qr = QuestionReponse.objects.create(
+                    template=template,
+                    question=question_text,
+                    reponse=reponse_text,
+                    ordre=ordre
+                )
+                created_qr.append(qr.id)
+        return Response({"created": len(created_qr)}, status=201)
 
 
 class AgentIAViewSet(viewsets.ModelViewSet):
