@@ -179,30 +179,26 @@ class AgentIAViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Template retiré."}, status=200)
         except Template.DoesNotExist:
             return Response({"detail": "Template introuvable."}, status=404)
-
     @action(detail=True, methods=["post"], url_path="match", permission_classes=[permissions.IsAuthenticated])
     def match_local(self, request, pk=None):
-        """
-        Matching local:
-        - Cherche dans questions personnalisées (agent)
-        - Sinon dans templates associés
-        - Retourne la réponse locale si trouvée, sinon source 'llm' pour fallback
-        """
         agent = self.get_object()
         user_question = (request.data.get("question") or "").strip()
-        threshold = float(request.data.get("threshold", 0.49))
+        threshold = float(request.data.get("threshold", 0.55))
+        top_n = int(request.data.get("top_n", 5))
 
         if not user_question:
             return Response({"detail": "Question manquante."}, status=400)
 
-        result = find_best_local_match(agent, user_question, threshold=threshold)
-        if result:
-            qr_obj, score = result
-            return Response({
-                "source": "local",
-                "matched_question": qr_obj.question,
-                "response": qr_obj.reponse,
-                "score": score
-            }, status=200)
-        # no local match
-        return Response({"source": "llm", "detail": "Aucun match local trouvé."}, status=204)
+        matches = find_best_local_match(agent, user_question, threshold=threshold, top_n=top_n)
+
+        if not matches:
+            return Response({"source": "llm", "detail": "Aucun match local trouvé."}, status=204)
+
+        best = matches[0]
+        return Response({
+            "source": "local",
+            "best_match": best,
+            "alternatives": matches[1:],  # le reste
+            "count": len(matches)
+        }, status=200)
+
