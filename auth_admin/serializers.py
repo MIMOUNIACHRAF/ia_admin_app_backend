@@ -27,7 +27,6 @@ class AdminUserSerializer(serializers.ModelSerializer):
 
 class QuestionReponseSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)
-
     class Meta:
         model = QuestionReponse
         fields = ["id", "question", "reponse", "ordre", "agent", "template"]

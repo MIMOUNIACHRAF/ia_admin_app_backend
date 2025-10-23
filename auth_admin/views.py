@@ -201,4 +201,32 @@ class AgentIAViewSet(viewsets.ModelViewSet):
             "alternatives": matches[1:],  # le reste
             "count": len(matches)
         }, status=200)
+    @action(detail=True, methods=["post"], url_path="add-question")
+    def add_question(self, request, pk=None):
+        """
+        Ajouter directement une question/réponse à un agent sans passer par un template.
+        """
+        agent = self.get_object()
+        question_text = request.data.get("question")
+        reponse_text = request.data.get("reponse")
+        ordre = request.data.get("ordre", 0)
 
+        if not question_text or not reponse_text:
+            return Response(
+                {"detail": "Les champs 'question' et 'reponse' sont obligatoires."},
+                status=400
+            )
+
+        # Créer la question directement liée à l'agent
+        qr = QuestionReponse.objects.create(
+            agent=agent,
+            question=question_text,
+            reponse=reponse_text,
+            ordre=ordre
+        )
+
+        serializer = QuestionReponseSerializer(qr)
+        return Response(
+            {"detail": "Question ajoutée avec succès.", "data": serializer.data},
+            status=201
+        )
